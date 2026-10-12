@@ -48,6 +48,8 @@ Standard LeRobot commands (`lerobot-find-port`, `lerobot-record`, `lerobot-teleo
 | **Port Management** | Prints ports; manual copy-pasting | 1-click list select, interactive plug-and-detect wizard, udev rules |
 | **Keyboard Control** | Crashes on Wayland/SSH/Docker; loses focus | Cross-platform (Linux, Windows, macOS) native reader + OpenCV bridge |
 | **Recording QoL** | Rigid flow, long encoding pauses | Hotkey flow (Enter/Right/Left/Space/Esc), buffer clearing, Rerun viz, sound cues, streaming encode |
+| **EE Pose Tracking** | Joint states only | Real-time Forward Kinematics (pos + quaternion) via URDF or analytical solver |
+| **Depth Streaming** | Color RGB only | Multi-camera 16-bit mm depth encoded into standard MP4 video + colormapped previews |
 | **Dataset Pruning** | Manual custom scripts | 1-command depth stripping, 6-DoF/custom EE slicing, metadata sync, Hub upload |
 | **Annotation Splitting** | Monolithic datasets | Strategy-based splitting (subtask, task_aug, plan, VQA, speech), video re-encoding, Hub push |
 | **Calibration** | Hidden JSON files in cache | List, inspect joints visually, backup, restore, diff, export/import |
@@ -280,6 +282,46 @@ clirobot record \
 
 ---
 
+## 🦾 Modular Robot Hardware Wrappers & Kinematics
+
+Standard LeRobot records only raw joint angles (`observation.state`) and color RGB videos. CLIrobot introduces **Modular Hardware Wrappers** (`ModularPhysicalWrapper`, `So101PhysicalWrapper`, `So100PhysicalWrapper`) registered as official LeRobot subclasses (`modular_physical_wrapped`, `so101_physical_wrapped`, `so100_physical_wrapped`):
+
+### 1. End-Effector 3D Coordinates & Pose Tracking (Forward Kinematics)
+* Computes real-time 3D Cartesian coordinates (`ee_pos_x`, `ee_pos_y`, `ee_pos_z`) and orientation quaternions (`ee_quat_x`, `ee_quat_y`, `ee_quat_z`, `ee_quat_w`) as native observation features.
+* **URDF Scene Graph Support**: Seamlessly evaluates robot URDF models (`so_arm100_description`, `so_arm101_description`, custom URDFs) using `yourdfpy` or `robot_descriptions`.
+* **Analytical FK Fallback**: Automatic analytical kinematics solver ensures robust, zero-dependency FK computation even without URDF packages installed.
+* **Modular Multi-Arm Generalization**: Works out-of-the-box for SO-100, SO-101, Koch, Aloha, and custom serial arms. Maintains 100% drop-in backward compatibility with `lerobot_teleoperator_so101_ik`.
+
+### 2. Multi-Camera 16-Bit RealSense Depth Streaming
+* Standard MP4 video codecs expect 3-channel 8-bit frames. CLIrobot encodes lossless 16-bit millimeter depth ($0$ to $65,535\text{ mm} \approx 65.5\text{ m}$) into 3-channel uint8 arrays:
+  * **Channel R**: High 8 bits (`(depth_mm >> 8) & 0xFF`)
+  * **Channel G**: Low 8 bits (`depth_mm & 0xFF`)
+  * **Channel B**: Reserved (`0`)
+* **Dual Stream Generation**:
+  * `{camera}_depth`: Lossless millimeter depth for neural network policy inputs.
+  * `{camera}_depth_vis`: Normalized RGB colormapped visual preview (Jet/Turbo) for Rerun live inspection and human monitoring.
+* **Hardware-Agnostic Discovery**: Automatically inspects all cameras attached to the robot (Intel RealSense, Orbbec, OAK-D, etc.) without hardcoded camera names or fixed 480x640 resolutions.
+
+### Usage in Teleoperation & Recording:
+```bash
+# Record with end-effector pose tracking and RealSense depth streaming
+clirobot record \
+  --enable-ee-pose \
+  --enable-depth \
+  --episodes 10 \
+  --task "Pick up coffee pod"
+
+# Teleoperate with custom URDF model and specific EE link
+clirobot teleop \
+  --enable-ee-pose \
+  --enable-depth \
+  --urdf-name so_arm101_description \
+  --target-link gripper
+```
+You can also toggle `enable_ee_pose` and `enable_depth` directly in your profile via the TUI (`clirobot` -> **Profiles & Configuration** -> **Quick Setup Parameters**).
+
+---
+
 ## 🧹 Dataset Pruning (`clirobot dataset prune`)
 
 Prepare raw datasets for imitation learning architectures (ACT, Diffusion Policy, SmolVLA) by stripping redundant camera streams and slicing degrees of freedom:
@@ -442,7 +484,7 @@ CLIrobot comes with a full automated test suite:
 pytest -v
 ```
 
-All 36 test cases cover configuration serialization, port enumeration, udev rule generation, calibration inspection, diffing, keyboard readers, OpenCV bridges, dataset pruning, annotation-based splitting, recording QoL flags, and CLI execution.
+All 55 test cases cover configuration serialization, port enumeration, udev rule generation, calibration inspection, diffing, keyboard readers, OpenCV bridges, dataset pruning, annotation-based splitting, recording QoL flags, forward kinematics pose tracking, 16-bit depth encoding/decoding, and modular robot hardware wrappers.
 
 ---
 

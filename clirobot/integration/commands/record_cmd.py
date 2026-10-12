@@ -28,6 +28,10 @@ def record_demonstrations(
     reset_every_episode: bool = typer.Option(False, "--reset-every-episode", help="Reset robot or scene between episodes"),
     resume: bool = typer.Option(False, "--resume", help="Resume recording into an existing dataset"),
     batch_encoding_size: Optional[int] = typer.Option(None, "--batch-encoding-size", help="Video encoding batch size"),
+    enable_ee_pose: Optional[bool] = typer.Option(None, "--enable-ee-pose/--disable-ee-pose", help="Track end-effector Cartesian coordinates and quaternion"),
+    enable_depth: Optional[bool] = typer.Option(None, "--enable-depth/--disable-depth", help="Capture RealSense camera depth channels"),
+    urdf_name: Optional[str] = typer.Option(None, "--urdf-name", help="Custom robot URDF model for forward kinematics"),
+    target_link: Optional[str] = typer.Option(None, "--target-link", help="End effector link name (default: gripper)"),
     private: bool = typer.Option(False, "--private", help="Create private repository on Hub"),
     tags: Optional[List[str]] = typer.Option(None, "--tag", help="Dataset tags for Hub"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Inspect command without executing"),
@@ -53,6 +57,10 @@ def record_demonstrations(
         reset_every_episode=reset_every_episode,
         resume=resume,
         batch_encoding_size=batch_encoding_size,
+        enable_ee_pose=enable_ee_pose,
+        enable_depth=enable_depth,
+        urdf_name=urdf_name,
+        target_link=target_link,
         private=private,
         tags=tags,
         extra_args=extra,
@@ -69,6 +77,10 @@ def record_demonstrations(
         qol_badges.append("Scene Reset")
     if resume:
         qol_badges.append("Resume")
+    if enable_ee_pose if enable_ee_pose is not None else profile.enable_ee_pose:
+        qol_badges.append("EE Pose")
+    if enable_depth if enable_depth is not None else profile.enable_depth:
+        qol_badges.append("Depth Stream")
 
     console.print(
         build_hud_panel(

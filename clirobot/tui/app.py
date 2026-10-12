@@ -216,6 +216,11 @@ class TUIApp:
                     play_sounds = Confirm.ask("  • Enable audible voice / sound cues for episode events?", default=False)
                     reset_ep = Confirm.ask("  • Reset robot / environment between episodes?", default=False)
                     resume = Confirm.ask("  • Resume recording into existing dataset?", default=False)
+                    enable_ee = Confirm.ask("  • Track End-Effector Cartesian coordinates (pos/quat)?", default=profile.enable_ee_pose)
+                    enable_depth = Confirm.ask("  • Capture RealSense depth channels?", default=profile.enable_depth)
+                else:
+                    enable_ee = profile.enable_ee_pose
+                    enable_depth = profile.enable_depth
 
                 args = LeRobotArgsBuilder.build_record_args(
                     profile,
@@ -226,6 +231,8 @@ class TUIApp:
                     play_sounds=play_sounds,
                     reset_every_episode=reset_ep,
                     resume=resume,
+                    enable_ee_pose=enable_ee,
+                    enable_depth=enable_depth,
                 )
                 self.runner.run("record", args)
                 pause_return_to_menu()
@@ -707,12 +714,24 @@ class TUIApp:
                 new_fps = int(Prompt.ask("Default recording/teleop FPS", default=str(profile.default_fps)))
                 new_repo = Prompt.ask("Default dataset repo ID", default=profile.dataset_repo_id)
                 new_notes = Prompt.ask("Notes", default=profile.notes)
+                enable_ee = Confirm.ask("Enable End-Effector Pose Tracking (FK cartesian pos/quat)?", default=profile.enable_ee_pose)
+                enable_depth = Confirm.ask("Enable RealSense Depth capture?", default=profile.enable_depth)
+                target_urdf = profile.urdf_name
+                target_link = profile.target_link
+                if enable_ee:
+                    urdf_input = Prompt.ask("URDF robot model name (leave blank for analytical/default)", default=profile.urdf_name or "")
+                    target_urdf = urdf_input.strip() if urdf_input.strip() else None
+                    target_link = Prompt.ask("Target EE link name", default=profile.target_link)
 
                 profile.robot_type = new_type
                 profile.teleop_type = new_teleop
                 profile.default_fps = new_fps
                 profile.dataset_repo_id = new_repo
                 profile.notes = new_notes
+                profile.enable_ee_pose = enable_ee
+                profile.enable_depth = enable_depth
+                profile.urdf_name = target_urdf
+                profile.target_link = target_link
                 self.mgr.save()
                 print_success("Parameters updated successfully!")
                 time.sleep(1)
@@ -726,6 +745,10 @@ class TUIApp:
                 console.print(f"  • Dataset Repo:  [bold]{profile.dataset_repo_id}[/bold]")
                 console.print(f"  • Default FPS:   [bold]{profile.default_fps}[/bold]")
                 console.print(f"  • Cameras:       [bold]{len(profile.cameras)} configured[/bold]")
+                console.print(f"  • EE Pose Track: [{'bold green]Enabled' if profile.enable_ee_pose else 'dim]Disabled'}[/]")
+                console.print(f"  • Depth Stream:  [{'bold green]Enabled' if profile.enable_depth else 'dim]Disabled'}[/]")
+                if profile.urdf_name:
+                    console.print(f"  • Custom URDF:   [bold]{profile.urdf_name}[/bold]")
                 pause_return_to_menu()
 
             elif choice.id == "delete":

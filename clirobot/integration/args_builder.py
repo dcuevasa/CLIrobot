@@ -27,6 +27,10 @@ class LeRobotArgsBuilder:
         profile: RobotProfile,
         fps: int | None = None,
         display_cameras: bool = True,
+        enable_ee_pose: bool | None = None,
+        enable_depth: bool | None = None,
+        urdf_name: str | None = None,
+        target_link: str | None = None,
         extra_args: list[str] | None = None,
     ) -> list[str]:
         """Build argument list for lerobot-teleoperate."""
@@ -57,6 +61,23 @@ class LeRobotArgsBuilder:
         if display_cameras:
             args.append("--display_cameras=true")
 
+        # Kinematics & Depth flags
+        use_ee = enable_ee_pose if enable_ee_pose is not None else profile.enable_ee_pose
+        if use_ee:
+            args.append("--robot.enable_ee_pose=true")
+
+        use_depth = enable_depth if enable_depth is not None else profile.enable_depth
+        if use_depth:
+            args.append("--robot.enable_depth=true")
+
+        target_urdf = urdf_name or profile.urdf_name
+        if target_urdf:
+            args.append(f"--robot.urdf_name={target_urdf}")
+
+        target_lk = target_link or (profile.target_link if profile.target_link != "gripper" else None)
+        if target_lk:
+            args.append(f"--robot.target_link={target_lk}")
+
         if extra_args:
             args.extend(extra_args)
 
@@ -82,6 +103,10 @@ class LeRobotArgsBuilder:
         batch_encoding_size: int | None = None,
         private: bool = False,
         tags: list[str] | None = None,
+        enable_ee_pose: bool | None = None,
+        enable_depth: bool | None = None,
+        urdf_name: str | None = None,
+        target_link: str | None = None,
         extra_args: list[str] | None = None,
     ) -> list[str]:
         """Build argument list for lerobot-record with smart profile integration and recording QoL flags."""
@@ -147,6 +172,23 @@ class LeRobotArgsBuilder:
 
         if batch_encoding_size is not None:
             args.append(f"--dataset.video_encoding_batch_size={batch_encoding_size}")
+
+        # Kinematics & Depth flags
+        use_ee = enable_ee_pose if enable_ee_pose is not None else profile.enable_ee_pose
+        if use_ee:
+            args.append("--robot.enable_ee_pose=true")
+
+        use_depth = enable_depth if enable_depth is not None else profile.enable_depth
+        if use_depth:
+            args.append("--robot.enable_depth=true")
+
+        target_urdf = urdf_name or profile.urdf_name
+        if target_urdf:
+            args.append(f"--robot.urdf_name={target_urdf}")
+
+        target_lk = target_link or (profile.target_link if profile.target_link != "gripper" else None)
+        if target_lk:
+            args.append(f"--robot.target_link={target_lk}")
 
         if extra_args:
             args.extend(extra_args)

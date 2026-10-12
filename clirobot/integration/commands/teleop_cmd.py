@@ -16,6 +16,10 @@ def teleoperate(
     ctx: typer.Context,
     fps: Optional[int] = typer.Option(None, "--fps", help="Target loop FPS"),
     display_cameras: bool = typer.Option(True, "--display-cameras/--no-cameras", help="Show live camera preview"),
+    enable_ee_pose: Optional[bool] = typer.Option(None, "--enable-ee-pose/--disable-ee-pose", help="Track end-effector Cartesian coordinates and quaternion"),
+    enable_depth: Optional[bool] = typer.Option(None, "--enable-depth/--disable-depth", help="Capture RealSense camera depth channels"),
+    urdf_name: Optional[str] = typer.Option(None, "--urdf-name", help="Custom robot URDF model for forward kinematics"),
+    target_link: Optional[str] = typer.Option(None, "--target-link", help="End effector link name (default: gripper)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Inspect command without executing"),
     extra: Optional[List[str]] = typer.Argument(None, help="Additional arguments passed to LeRobot"),
 ):
@@ -39,6 +43,10 @@ def teleoperate(
         profile,
         fps=fps,
         display_cameras=display_cameras,
+        enable_ee_pose=enable_ee_pose,
+        enable_depth=enable_depth,
+        urdf_name=urdf_name,
+        target_link=target_link,
         extra_args=extra,
     )
 

@@ -16,6 +16,9 @@ LEGACY_CACHE_DIR = Path.home() / ".cache" / "lerobot"
 SUPPORTED_ROBOTS = [
     "so100",
     "so101",
+    "modular_physical_wrapped",
+    "so101_physical_wrapped",
+    "so100_physical_wrapped",
     "koch",
     "koch_bimanual",
     "aloha",

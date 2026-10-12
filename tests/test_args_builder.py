@@ -86,3 +86,44 @@ def test_build_train_args():
     assert "--batch_size=16" in args
     assert "--training.steps=50000" in args
     assert "--wandb.enable=true" in args
+
+
+def test_build_teleoperate_args_with_ee_and_depth():
+    profile = RobotProfile(
+        name="test_kinematics_teleop",
+        robot_type="modular_physical_wrapped",
+        enable_ee_pose=True,
+        enable_depth=True,
+        urdf_name="so_arm101_description",
+        target_link="gripper",
+    )
+    args = LeRobotArgsBuilder.build_teleoperate_args(
+        profile,
+        enable_ee_pose=True,
+        enable_depth=True,
+        urdf_name="custom_arm",
+        target_link="end_effector_tip",
+    )
+    assert "--robot.enable_ee_pose=true" in args
+    assert "--robot.enable_depth=true" in args
+    assert "--robot.urdf_name=custom_arm" in args
+    assert "--robot.target_link=end_effector_tip" in args
+
+
+def test_build_record_args_with_ee_and_depth():
+    profile = RobotProfile(
+        name="test_kinematics_record",
+        robot_type="so101_physical_wrapped",
+        enable_ee_pose=True,
+        enable_depth=True,
+    )
+    args = LeRobotArgsBuilder.build_record_args(
+        profile,
+        num_episodes=3,
+        enable_ee_pose=True,
+        enable_depth=True,
+        urdf_name="so_arm101_description",
+    )
+    assert "--robot.enable_ee_pose=true" in args
+    assert "--robot.enable_depth=true" in args
+    assert "--robot.urdf_name=so_arm101_description" in args

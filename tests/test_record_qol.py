@@ -75,13 +75,15 @@ def test_hud_panel_qol_badges():
 
 
 def test_cli_record_help():
-    result = runner.invoke(app, ["record", "--help"])
+    result = runner.invoke(app, ["record", "--help"], env={"COLUMNS": "160"})
     assert result.exit_code == 0
     assert "--display-data" in result.output
     assert "--streaming-encoding" in result.output
     assert "--play-sounds" in result.output
     assert "--reset-every-episode" in result.output
     assert "--resume" in result.output
+    assert "--enable-ee-pose" in result.output
+    assert "--enable-depth" in result.output
 
 
 def test_cli_dataset_subcommands_help():

@@ -65,6 +65,11 @@ class RobotProfile:
     default_fps: int = 30
     teleop_type: str = "so100_leader"
     calibration_dir: str = ""
+    enable_ee_pose: bool = False
+    enable_depth: bool = False
+    urdf_name: str = ""
+    target_link: str = "gripper"
+    max_depth_mm: float = 3000.0
     notes: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -97,6 +102,11 @@ class RobotProfile:
             default_fps=int(data.get("default_fps", 30)),
             teleop_type=data.get("teleop_type", "so100_leader"),
             calibration_dir=data.get("calibration_dir", ""),
+            enable_ee_pose=bool(data.get("enable_ee_pose", False)),
+            enable_depth=bool(data.get("enable_depth", False)),
+            urdf_name=str(data.get("urdf_name", "")),
+            target_link=str(data.get("target_link", "gripper")),
+            max_depth_mm=float(data.get("max_depth_mm", 3000.0)),
             notes=data.get("notes", ""),
         )
 
