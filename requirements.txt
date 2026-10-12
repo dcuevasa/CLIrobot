@@ -1,0 +1,23 @@
+# CLIrobot Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core Frameworks
+lerobot>=0.4.0
+typer>=0.12.0
+rich>=13.0.0
+pyserial>=3.5
+
+# Vision & Hardware Preview
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
+
+# Development & Testing
+pytest>=8.0.0
+
+# Optional Motor & Hardware Extras:
+# For SO-100 / SO-101 (Feetech servos):
+#   pip install "lerobot[feetech]"
+# For Koch / Aloha (Dynamixel servos):
+#   pip install "lerobot[dynamixel]"
+# For Intel RealSense Cameras:
+#   pip install "lerobot[intelrealsense]"
