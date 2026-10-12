@@ -74,9 +74,17 @@ class LeRobotArgsBuilder:
         single_task: str | None = None,
         fps: int | None = None,
         push_to_hub: bool = False,
+        display_data: bool = False,
+        play_sounds: bool = False,
+        streaming_encoding: bool = False,
+        reset_every_episode: bool = False,
+        resume: bool = False,
+        batch_encoding_size: int | None = None,
+        private: bool = False,
+        tags: list[str] | None = None,
         extra_args: list[str] | None = None,
     ) -> list[str]:
-        """Build argument list for lerobot-record."""
+        """Build argument list for lerobot-record with smart profile integration and recording QoL flags."""
         args: list[str] = []
 
         if profile.robot_type:
@@ -113,6 +121,32 @@ class LeRobotArgsBuilder:
 
         if push_to_hub:
             args.append("--dataset.push_to_hub=true")
+
+        if private:
+            args.append("--dataset.private=true")
+
+        if tags:
+            tags_str = "[" + ", ".join(f'"{t}"' for t in tags) + "]"
+            args.append(f"--dataset.tags={tags_str}")
+
+        # Recording QoL features
+        if display_data:
+            args.append("--display_data=true")
+
+        if play_sounds:
+            args.append("--play_sounds=true")
+
+        if streaming_encoding:
+            args.append("--dataset.streaming_encoding=true")
+
+        if reset_every_episode:
+            args.append("--robot.reset_every_episode=true")
+
+        if resume:
+            args.append("--resume=true")
+
+        if batch_encoding_size is not None:
+            args.append(f"--dataset.video_encoding_batch_size={batch_encoding_size}")
 
         if extra_args:
             args.extend(extra_args)

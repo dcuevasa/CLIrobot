@@ -47,10 +47,13 @@ Standard LeRobot commands (`lerobot-find-port`, `lerobot-record`, `lerobot-teleo
 | **UI & Experience** | Raw terminal output | Rich color-coded tables, status panels, HUDs, and spinners |
 | **Port Management** | Prints ports; manual copy-pasting | 1-click list select, interactive plug-and-detect wizard, udev rules |
 | **Keyboard Control** | Crashes on Wayland/SSH/Docker; loses focus | Cross-platform (Linux, Windows, macOS) native reader + OpenCV bridge |
+| **Recording QoL** | Rigid flow, long encoding pauses | Hotkey flow (Enter/Right/Left/Space/Esc), buffer clearing, Rerun viz, sound cues, streaming encode |
+| **Dataset Pruning** | Manual custom scripts | 1-command depth stripping, 6-DoF/custom EE slicing, metadata sync, Hub upload |
+| **Annotation Splitting** | Monolithic datasets | Strategy-based splitting (subtask, task_aug, plan, VQA, speech), video re-encoding, Hub push |
 | **Calibration** | Hidden JSON files in cache | List, inspect joints visually, backup, restore, diff, export/import |
 | **Camera Setup** | Guess index 0, 1, 2 | 1-click list select, instant ASCII terminal preview, role binding |
-| **Profile Switcher** | Re-type all flags every session | Switch profiles (`so100-desk`, `koch-bimanual`, `aloha`) in 1 command |
-| **Coverage** | 20 fragmented scripts | Every single LeRobot feature unified under one intuitive CLI |
+| **Profile Switcher** | Re-type all flags every session | Switch profiles (`so100-desk`, `so101-lab`, `koch-bimanual`, `aloha`) in 1 command |
+| **Coverage** | Fragmented scripts | Unified hub with full LeRobot command map and dataset tools |
 
 ---
 
@@ -246,7 +249,105 @@ clirobot calibrate import ./my_calibration.json --robot-type so100 --robot-id te
 
 ---
 
-## 🎯 Modular Command Map (All 20 LeRobot Features)
+## 🎥 Demonstration Recording & Quality-of-Life (QoL) Controls
+
+CLIrobot enhances LeRobot demonstration recording with intuitive episode lifecycle controls, visual HUD feedback, buffer clearing, and asynchronous video streaming:
+
+```bash
+# Record with full QoL features enabled
+clirobot record \
+  --episodes 10 \
+  --task "Pick up coffee pod" \
+  --display-data \
+  --streaming-encoding \
+  --play-sounds \
+  --reset-every-episode
+```
+
+### Hotkey Lifecycle & Buffer Management
+* **`[ENTER]`**: Start recording episode (from waiting or warmup states).
+* **`[RIGHT]`**: Accept & save episode (can accept early before countdown expiration).
+* **`[LEFT]`**: Discard episode & clear buffer (`clear_episode_buffer()`), preventing partial or failed attempts from polluting the dataset.
+* **`[SPACE]`**: Skip / redo attempt without saving.
+* **`[ESC]` or `[Q]`**: Gracefully stop recording session and save all accepted episodes.
+
+### QoL Flags
+* **`--display-data` / `--rerun`**: Real-time Rerun visualizer streaming robot actions, joint states, and camera feeds.
+* **`--streaming-encoding`**: Asynchronously encodes MP4 streams in worker threads so saving episodes is instantaneous without long end-of-episode freezing.
+* **`--play-sounds`**: Auditory cues and TTS voice announcements for episode start, accept, discard, and finish.
+* **`--reset-every-episode`**: Signals the environment / robot to reset home positions or scene objects between episodes.
+* **`--resume`**: Safely resume recording into an existing dataset repository without overwriting existing episodes.
+
+---
+
+## 🧹 Dataset Pruning (`clirobot dataset prune`)
+
+Prepare raw datasets for imitation learning architectures (ACT, Diffusion Policy, SmolVLA) by stripping redundant camera streams and slicing degrees of freedom:
+
+```bash
+# Strip heavy depth video streams and slice state/action vectors to 6 DoF
+clirobot dataset prune \
+  --repo-id "user/so101_raw_dataset" \
+  --output "./pruned_dataset" \
+  --drop-depth \
+  --drop-ee
+
+# Prune specific features and slice state/action to custom 4 DoF
+clirobot dataset prune \
+  --repo-id "./my_dataset" \
+  --slice-dof 4 \
+  --drop-feature "custom_sensor"
+
+# Prune and upload directly to Hugging Face Hub
+clirobot dataset prune \
+  --repo-id "user/raw-dataset" \
+  --output-repo-id "user/act-ready-dataset" \
+  --drop-depth \
+  --drop-ee \
+  --push-to-hub
+```
+
+### What Pruning Does:
+1. **Parquet Tables**: Drops depth observation columns and slices `observation.state` and `action` arrays to the desired DoF.
+2. **Video Folders**: Recursively deletes matching depth video directories in `videos/chunk-*`.
+3. **Metadata Synchronization**: Updates `meta/info.json` feature shapes, tensor names, and synchronizes `meta/stats.json` min/max/mean metrics.
+4. **Structure Enforcement**: Standardizes loose metadata files into the compliant `meta/` directory structure.
+
+---
+
+## 🔪 Dataset Splitting by Annotations (`clirobot dataset split`)
+
+Automatically segment complex multi-step demonstration datasets into subdatasets corresponding to individual subtasks, task augmentations, or high-level plans using visualizer annotations (`meta/lerobot_annotations.json` v2/v1 or parquet language columns):
+
+```bash
+# 1. Inspect annotations and coverage without writing files:
+clirobot dataset annotations --repo-id "./my_dataset"
+
+# 2. Split dataset by all subtasks:
+clirobot dataset split \
+  --repo-id "./my_dataset" \
+  --output-dir "./subdatasets" \
+  --annotation-type subtask
+
+# 3. Extract a specific subtask and upload to Hugging Face Hub:
+clirobot dataset split \
+  --repo-id "user/so101-leader-v1" \
+  --annotation-type subtask \
+  --subtask "pick up coffee pod" \
+  --push-to-hub \
+  --hub-repo-prefix "user/so101-subtask-"
+```
+
+### Extensible Splitting Strategies:
+* **`subtask` (Default)**: Consecutive subtask annotations `[t_k, t_{k+1})` are sliced into individual episodes with re-indexed frames, temporal alignment, and video re-encoding. First subtask automatically snaps to `0.0s` to prevent losing initial frames.
+* **`task_aug`**: Groups and splits full episodes based on task augmentation labels.
+* **`plan`**: Slices episodes based on high-level multi-step execution plans.
+* **`vqa`**: Extracts temporal windows around visual question answering events.
+* **`speech`**: Extracts windows around dialogue, interjections, and robot speech (`say` actions).
+
+---
+
+## 🎯 Modular Command Map (All LeRobot Features & Tools)
 
 Every single LeRobot command is directly accessible, modular, and integrates with your active profile:
 
@@ -266,6 +367,9 @@ Every single LeRobot command is directly accessible, modular, and integrates wit
 | `clirobot rollout` | `lerobot-rollout` | Execute policy rollouts |
 | `clirobot annotate` | `lerobot-annotate` | Annotate dataset episodes |
 | `clirobot dataset edit` | `lerobot-edit-dataset` | Trim, filter, or merge dataset episodes |
+| `clirobot dataset prune` | `clirobot dataset prune` | Prune depth streams, slice EE DoFs, sync metadata |
+| `clirobot dataset split` | `clirobot dataset split` | Split dataset into subdatasets by annotations |
+| `clirobot dataset annotations` | `clirobot dataset annotations` | Inspect & summarize visualizer annotations |
 | `clirobot dataset viz` | `lerobot-dataset-viz` | Launch Rerun visualizer for datasets |
 | `clirobot dataset transform-viz`| `lerobot-imgtransform-viz`| Visualize data augmentations |
 | `clirobot dataset sidecar` | `lerobot-build-mp4-sidecar`| Build fast-streaming MP4 sidecars |
@@ -338,7 +442,7 @@ CLIrobot comes with a full automated test suite:
 pytest -v
 ```
 
-All 19 test cases cover configuration serialization, port enumeration, udev rule generation, calibration inspection, diffing, keyboard readers, OpenCV bridges, and CLI execution.
+All 36 test cases cover configuration serialization, port enumeration, udev rule generation, calibration inspection, diffing, keyboard readers, OpenCV bridges, dataset pruning, annotation-based splitting, recording QoL flags, and CLI execution.
 
 ---
 

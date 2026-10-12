@@ -22,10 +22,18 @@ def record_demonstrations(
     task: Optional[str] = typer.Option(None, "--task", "-t", help="Natural language description of the task"),
     fps: Optional[int] = typer.Option(None, "--fps", help="Recording FPS"),
     push_to_hub: bool = typer.Option(False, "--push-to-hub", help="Upload dataset to Hugging Face Hub after recording"),
+    display_data: bool = typer.Option(False, "--display-data", "--rerun", help="Launch Rerun live data visualizer"),
+    play_sounds: bool = typer.Option(False, "--play-sounds", help="Play audible voice / sound cues for episode events"),
+    streaming_encoding: bool = typer.Option(False, "--streaming-encoding", help="Stream-encode videos asynchronously for instant saves"),
+    reset_every_episode: bool = typer.Option(False, "--reset-every-episode", help="Reset robot or scene between episodes"),
+    resume: bool = typer.Option(False, "--resume", help="Resume recording into an existing dataset"),
+    batch_encoding_size: Optional[int] = typer.Option(None, "--batch-encoding-size", help="Video encoding batch size"),
+    private: bool = typer.Option(False, "--private", help="Create private repository on Hub"),
+    tags: Optional[List[str]] = typer.Option(None, "--tag", help="Dataset tags for Hub"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Inspect command without executing"),
     extra: Optional[List[str]] = typer.Argument(None, help="Additional arguments passed to LeRobot"),
 ):
-    """Record episodes with hotkeys for pause, re-record, and episode saving."""
+    """Record episodes with hotkeys for manual flow, discard/retry, buffer clearing, and instant saves."""
     mgr = ConfigManager()
     profile = mgr.get_active_profile()
 
@@ -39,8 +47,28 @@ def record_demonstrations(
         single_task=task,
         fps=fps,
         push_to_hub=push_to_hub,
+        display_data=display_data,
+        play_sounds=play_sounds,
+        streaming_encoding=streaming_encoding,
+        reset_every_episode=reset_every_episode,
+        resume=resume,
+        batch_encoding_size=batch_encoding_size,
+        private=private,
+        tags=tags,
         extra_args=extra,
     )
+
+    qol_badges = []
+    if display_data:
+        qol_badges.append("Rerun Viz")
+    if streaming_encoding:
+        qol_badges.append("Streaming Encode")
+    if play_sounds:
+        qol_badges.append("Audio Cues")
+    if reset_every_episode:
+        qol_badges.append("Scene Reset")
+    if resume:
+        qol_badges.append("Resume")
 
     console.print(
         build_hud_panel(
@@ -49,6 +77,7 @@ def record_demonstrations(
             total_episodes=episodes,
             fps=float(fps or profile.default_fps),
             backend="Enhanced TTY / Safe Mode",
+            qol_features=qol_badges if qol_badges else None,
         )
     )
 

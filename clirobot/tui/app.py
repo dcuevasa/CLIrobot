@@ -202,10 +202,30 @@ class TUIApp:
                 console.print(f"\n[bold cyan]Demonstration Recording Setup ({profile.name})[/bold cyan]\n")
                 episodes = int(Prompt.ask("Number of episodes to record", default="10"))
                 task = Prompt.ask("Task instruction (optional)", default="")
+                
+                configure_qol = Confirm.ask("Configure recording QoL options (Rerun viz, streaming encode, sound cues, scene reset)?", default=False)
+                display_data = False
+                streaming_enc = False
+                play_sounds = False
+                reset_ep = False
+                resume = False
+
+                if configure_qol:
+                    display_data = Confirm.ask("  • Launch Rerun live visualizer?", default=True)
+                    streaming_enc = Confirm.ask("  • Stream-encode video asynchronously for instant saves?", default=True)
+                    play_sounds = Confirm.ask("  • Enable audible voice / sound cues for episode events?", default=False)
+                    reset_ep = Confirm.ask("  • Reset robot / environment between episodes?", default=False)
+                    resume = Confirm.ask("  • Resume recording into existing dataset?", default=False)
+
                 args = LeRobotArgsBuilder.build_record_args(
                     profile,
                     num_episodes=episodes,
                     single_task=task if task else None,
+                    display_data=display_data,
+                    streaming_encoding=streaming_enc,
+                    play_sounds=play_sounds,
+                    reset_every_episode=reset_ep,
+                    resume=resume,
                 )
                 self.runner.run("record", args)
                 pause_return_to_menu()
@@ -944,6 +964,24 @@ class TUIApp:
                     description="Interactive tool to add natural language instructions to episodes.",
                 ),
                 MenuItem(
+                    id="prune",
+                    label="Prune Dataset (Drop Depth / Slices)",
+                    icon="🧹",
+                    description="Strip depth streams or slice state/action DoFs to prepare clean training data.",
+                ),
+                MenuItem(
+                    id="split",
+                    label="Split Dataset by Annotations",
+                    icon="🔪",
+                    description="Divide episodes into subdatasets using visualizer subtask annotations.",
+                ),
+                MenuItem(
+                    id="inspect_ann",
+                    label="Inspect Dataset Annotations",
+                    icon="🔍",
+                    description="Summary report of subtasks, VQA, speech tags, and episode coverage.",
+                ),
+                MenuItem(
                     id="sidecar",
                     label="Build Fast-Streaming MP4 Sidecars",
                     icon="🎬",
@@ -965,7 +1003,7 @@ class TUIApp:
 
             choice = run_menu(
                 title="Datasets & Visualization",
-                subtitle="Explore, annotate, edit, and build video sidecars for datasets:",
+                subtitle="Explore, annotate, edit, prune, split, and build video sidecars for datasets:",
                 items=items,
                 active_profile=profile,
                 breadcrumbs=["Home", "Datasets"],
@@ -979,6 +1017,55 @@ class TUIApp:
             if choice.id == "viz":
                 repo = Prompt.ask("Dataset repo ID", default=profile.dataset_repo_id)
                 self.runner.run("dataset-viz", [f"--repo-id={repo}"])
+                pause_return_to_menu()
+
+            elif choice.id == "prune":
+                from clirobot.dataset.prune import prune_dataset, display_prune_result
+                repo = Prompt.ask("Dataset path or HF repo ID", default=profile.dataset_repo_id)
+                drop_d = Confirm.ask("Drop depth observation streams & videos?", default=True)
+                drop_e = Confirm.ask("Slice state and action to 6 DoF (remove extra EE axes)?", default=True)
+                out_p = Prompt.ask("Destination directory (leave blank for in-place / temp)", default="")
+                try:
+                    res = prune_dataset(
+                        dataset_path=repo,
+                        output_path=out_p if out_p.strip() else None,
+                        drop_depth=drop_d,
+                        drop_ee=drop_e,
+                    )
+                    display_prune_result(res)
+                except Exception as e:
+                    print_error(f"Prune error: {e}")
+                pause_return_to_menu()
+
+            elif choice.id == "split":
+                from clirobot.dataset.split import split_dataset, display_split_results
+                repo = Prompt.ask("Dataset path or HF repo ID", default=profile.dataset_repo_id)
+                strategy = Prompt.ask("Annotation split strategy", choices=["subtask", "task_aug", "plan", "vqa", "speech"], default="subtask")
+                out_d = Prompt.ask("Output directory for subdatasets", default="./subdatasets")
+                drop_d = Confirm.ask("Drop depth streams during split?", default=False)
+                drop_e = Confirm.ask("Slice state/actions to 6 DoF during split?", default=False)
+                try:
+                    results = split_dataset(
+                        dataset_path=repo,
+                        output_dir=out_d,
+                        annotation_type=strategy,
+                        drop_depth=drop_d,
+                        drop_ee=drop_e,
+                        overwrite=True,
+                    )
+                    display_split_results(results)
+                except Exception as e:
+                    print_error(f"Split error: {e}")
+                pause_return_to_menu()
+
+            elif choice.id == "inspect_ann":
+                from clirobot.dataset.annotations import inspect_annotations, display_annotation_summary
+                repo = Prompt.ask("Dataset path or HF repo ID", default=profile.dataset_repo_id)
+                try:
+                    summary = inspect_annotations(Path(repo))
+                    display_annotation_summary(summary)
+                except Exception as e:
+                    print_error(f"Annotation inspection error: {e}")
                 pause_return_to_menu()
 
             elif choice.id == "edit":
