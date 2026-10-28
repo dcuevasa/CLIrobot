@@ -21,6 +21,8 @@ from clirobot.integration.commands.motors_cmd import motors_app, joint_limits_ap
 from clirobot.integration.commands.dataset_cmd import app as dataset_app
 from clirobot.integration.commands.misc_cmd import info_app, annotate_app, tokenizer_app, convert_app
 from clirobot.integration.commands.profile_cmd import profile_app, config_app
+from clirobot.plugins.cli_cmd import app as plugin_app
+from clirobot.plugins.manager import PluginManager
 from clirobot.keyboard.tester import run_keyboard_test
 from clirobot.doctor.checker import display_doctor_report
 
@@ -58,6 +60,33 @@ app.add_typer(tokenizer_app, name="tokenizer", help="Train action/vision tokeniz
 app.add_typer(convert_app, name="convert", help="Convert PyTorch distributed checkpoints (DCP)")
 app.add_typer(profile_app, name="profile", help="Manage and switch robot hardware profiles")
 app.add_typer(config_app, name="config", help="Manage global configuration settings")
+app.add_typer(plugin_app, name="plugin", help="Manage and inspect CLIrobot plugins")
+app.add_typer(plugin_app, name="plugins", help="Alias for 'plugin'")
+
+# Dynamic CLI injection from enabled plugins
+_sub_apps = {
+    "ports": ports_app,
+    "cameras": cameras_app,
+    "calibrate": calibrate_app,
+    "teleop": teleop_app,
+    "record": record_app,
+    "replay": replay_app,
+    "train": train_app,
+    "eval": eval_app,
+    "dataset": dataset_app,
+    "profile": profile_app,
+    "config": config_app,
+}
+
+try:
+    _pm = PluginManager()
+    for _plugin in _pm.list_plugins(enabled_only=True):
+        try:
+            _plugin.register_cli(app, _sub_apps)
+        except Exception:
+            pass
+except Exception:
+    pass
 
 
 @app.callback(invoke_without_command=True)

@@ -218,3 +218,71 @@ def inspect_annotations_cmd(
         custom_annotations_path=Path(annotations_file) if annotations_file else None,
     )
     display_annotation_summary(summary)
+
+
+@app.command("transforms")
+def list_transforms():
+    """List all available dataset transformation tools registered across plugins."""
+    from clirobot.dataset.pipeline import DatasetPipelineEngine
+    from clirobot.ui.console import console, create_table
+
+    engine = DatasetPipelineEngine()
+    transforms = engine.list_available_transforms()
+
+    table = create_table(
+        "Available Dataset Transforms",
+        ["Transform ID", "Tool Name", "Plugin", "Description"],
+    )
+
+    for tid, (plugin, spec) in transforms.items():
+        table.add_row(
+            f"[bold cyan]{tid}[/bold cyan]",
+            f"{spec.icon} {spec.name}",
+            plugin.metadata.name,
+            spec.description,
+        )
+
+    console.print(table)
+
+
+pipeline_app = typer.Typer(help="Execute multi-step dataset pipelines.", no_args_is_help=False)
+
+
+@pipeline_app.command("run")
+def run_pipeline_cmd(
+    recipe: str = typer.Argument(..., help="Path to pipeline recipe JSON/YAML file"),
+    input_repo: Optional[str] = typer.Option(None, "--input", "-i", help="Override initial input dataset"),
+    output_dir: Optional[str] = typer.Option(None, "--output-dir", "-o", help="Final output directory"),
+    push_to_hub: bool = typer.Option(False, "--push-to-hub", help="Push final output to Hub"),
+    hub_repo_id: Optional[str] = typer.Option(None, "--hub-repo-id", help="Hugging Face repo ID for upload"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview pipeline steps without writing files"),
+):
+    """Run a multi-step dataset manipulation pipeline from a recipe."""
+    from clirobot.dataset.pipeline import DatasetPipelineEngine, load_pipeline_recipe
+    from clirobot.ui.console import print_error
+
+    try:
+        init_input, steps, meta = load_pipeline_recipe(recipe)
+    except Exception as e:
+        print_error(f"Failed to load recipe: {e}")
+        raise typer.Exit(code=1)
+
+    target_in = input_repo or init_input or ConfigManager().get_active_profile().dataset_repo_id
+    if not target_in:
+        print_error("No input dataset specified in recipe or via --input.")
+        raise typer.Exit(code=1)
+
+    engine = DatasetPipelineEngine()
+    res = engine.run_pipeline(
+        steps=steps,
+        initial_input=target_in,
+        output_dir=output_dir,
+        final_repo_id=hub_repo_id,
+        push_to_hub=push_to_hub,
+        dry_run=dry_run,
+    )
+    if not res.success:
+        raise typer.Exit(code=1)
+
+
+app.add_typer(pipeline_app, name="pipeline", help="Run chained dataset transformations")

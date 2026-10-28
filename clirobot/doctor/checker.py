@@ -141,6 +141,19 @@ def run_doctor_checks() -> list[CheckItem]:
     else:
         checks.append(CheckItem("Cache", "LeRobot Cache", "PASS", f"Ready ({cache_dir})"))
 
+    # 8. Plugin Diagnostics
+    try:
+        from clirobot.plugins.manager import PluginManager
+        from clirobot.plugins.base import PluginContext
+        from clirobot.integration.runner import CommandRunner
+
+        pm = PluginManager(mgr)
+        ctx = PluginContext(mgr, CommandRunner(mgr), console)
+        p_checks = pm.run_doctor_checks(ctx)
+        checks.extend(p_checks)
+    except Exception:
+        pass
+
     return checks
 
 

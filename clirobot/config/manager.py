@@ -190,3 +190,132 @@ class ConfigManager:
             self.save()
             return True
         return False
+
+    def get_plugin_config(
+        self,
+        plugin_id: str,
+        profile_name: str | None = None,
+        default: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Get per-profile configuration dictionary for a given plugin."""
+        profile = self.config.profiles.get(profile_name) if profile_name else self.get_active_profile()
+        if not profile:
+            return default or {}
+        return profile.plugin_configs.get(plugin_id, default or {})
+
+    def set_plugin_config(
+        self,
+        plugin_id: str,
+        data: dict[str, Any],
+        profile_name: str | None = None,
+    ) -> None:
+        """Set per-profile configuration dictionary for a given plugin."""
+        profile = self.config.profiles.get(profile_name) if profile_name else self.get_active_profile()
+        if profile:
+            profile.plugin_configs[plugin_id] = data
+            self.save()
+
+    def is_plugin_enabled(self, plugin_id: str) -> bool:
+        """Check if a plugin is enabled globally."""
+        if plugin_id in self.config.disabled_plugins:
+            return False
+        if not self.config.enabled_plugins:
+            return True  # By default, discovered plugins are enabled
+        return plugin_id in self.config.enabled_plugins
+
+    def enable_plugin(self, plugin_id: str) -> None:
+        """Enable a plugin globally."""
+        if plugin_id in self.config.disabled_plugins:
+            self.config.disabled_plugins.remove(plugin_id)
+        if plugin_id not in self.config.enabled_plugins:
+            self.config.enabled_plugins.append(plugin_id)
+        self.save()
+
+    def disable_plugin(self, plugin_id: str) -> None:
+        """Disable a plugin globally."""
+        if plugin_id in self.config.enabled_plugins:
+            self.config.enabled_plugins.remove(plugin_id)
+        if plugin_id not in self.config.disabled_plugins:
+            self.config.disabled_plugins.append(plugin_id)
+        self.save()
+
+    def add_plugin_search_path(self, path: str) -> bool:
+        """Add a directory to the plugin search paths."""
+        p_str = str(Path(path).expanduser().resolve())
+        if p_str not in self.config.plugin_search_paths:
+            self.config.plugin_search_paths.append(p_str)
+            self.save()
+            return True
+        return False
+
+    def import_env_script(self, script_path: Path | str, profile_name: str | None = None) -> RobotProfile:
+        """Import robot/camera/port variables from a shell script (e.g., set_variables.sh)."""
+        import re
+        path = Path(script_path)
+        if not path.is_file():
+            raise FileNotFoundError(f"Environment script not found: {path}")
+
+        vars_dict: dict[str, str] = {}
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                match = re.match(r"^([A-Z0-9_]+)=[\"']?(.*?)[\"']?$", line)
+                if match:
+                    k, v = match.group(1), match.group(2)
+                    vars_dict[k] = v
+
+        pname = profile_name or path.stem.replace("set_variables", "imported_env")
+        if pname not in self.config.profiles:
+            profile = self.create_profile(pname)
+        else:
+            profile = self.config.profiles[pname]
+
+        if "FOLLOWER_PORT" in vars_dict:
+            profile.follower_arm.port = vars_dict["FOLLOWER_PORT"]
+        if "LEADER_PORT" in vars_dict:
+            profile.leader_arm.port = vars_dict["LEADER_PORT"]
+        if "FOLLOWER_ID" in vars_dict:
+            profile.follower_arm.arm_id = vars_dict["FOLLOWER_ID"]
+        if "LEADER_ID" in vars_dict:
+            profile.leader_arm.arm_id = vars_dict["LEADER_ID"]
+        if "REPO_ID" in vars_dict:
+            profile.dataset_repo_id = vars_dict["REPO_ID"]
+
+        # Parse feature toggles into embodied-data plugin config
+        embodied_cfg = profile.plugin_configs.setdefault("embodied-data", {})
+        if "ENABLE_EE_POSE" in vars_dict:
+            embodied_cfg["enable_ee_pose"] = vars_dict["ENABLE_EE_POSE"].lower() == "true"
+        if "ENABLE_DEPTH" in vars_dict:
+            embodied_cfg["enable_depth"] = vars_dict["ENABLE_DEPTH"].lower() == "true"
+
+        # Check for RealSense / High camera
+        if vars_dict.get("USE_CAM_HIGH", "").lower() == "true":
+            use_depth = embodied_cfg.get("enable_depth", True)
+            profile.cameras["cam_high"] = CameraConfig(
+                name="cam_high",
+                camera_type="intelrealsense",
+                serial_number_or_name=vars_dict.get("REALSENSE_SERIAL", "944622074682"),
+                use_depth=use_depth,
+                width=640,
+                height=480,
+                fps=30,
+            )
+
+        if vars_dict.get("USE_CAM_WRIST", "").lower() == "true":
+            wrist_path = vars_dict.get(
+                "WRIST_PATH",
+                "/dev/v4l/by-id/usb-Arducam_Technology_Co.__Ltd._Arducam_1080P_Low_Light_UC684-video-index0",
+            )
+            profile.cameras["cam_wrist"] = CameraConfig(
+                name="cam_wrist",
+                camera_type="opencv",
+                index_or_path=wrist_path,
+                width=640,
+                height=480,
+                fps=30,
+            )
+
+        self.save()
+        return profile

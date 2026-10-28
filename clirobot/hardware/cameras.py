@@ -6,7 +6,7 @@ import sys
 import time
 from dataclasses import dataclass
 from typing import Any
-from clirobot.ui.console import console, print_info, print_success, print_warning, print_step, create_table
+from clirobot.ui.console import console, print_info, print_success, print_warning, print_error, print_step, create_table
 from clirobot.ui.prompts import prompt_select, prompt_confirm, prompt_text
 from clirobot.config.manager import ConfigManager
 

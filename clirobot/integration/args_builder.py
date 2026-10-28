@@ -11,14 +11,26 @@ class LeRobotArgsBuilder:
     def format_cameras_arg(cameras: dict[str, Any]) -> str:
         """Format cameras dict for LeRobot CLI.
         
-        Example format: "{laptop: 0, wrist: 1}"
+        Example format: "{laptop: 0, wrist: 1}" or typed dictionary for RealSense/custom.
         """
         if not cameras:
             return "{}"
         items = []
         for name, cam in cameras.items():
-            idx = getattr(cam, "index_or_path", cam)
-            items.append(f"{name}: {idx}")
+            cam_type = getattr(cam, "camera_type", "opencv")
+            if cam_type == "intelrealsense":
+                serial = getattr(cam, "serial_number_or_name", None) or getattr(cam, "index_or_path", "0")
+                use_d = str(getattr(cam, "use_depth", False)).lower()
+                w = getattr(cam, "width", 640)
+                h = getattr(cam, "height", 480)
+                fps = getattr(cam, "fps", 30)
+                items.append(
+                    f'"{name}": {{"type": "intelrealsense", "serial_number_or_name": "{serial}", '
+                    f'"width": {w}, "height": {h}, "fps": {fps}, "use_depth": {use_d}}}'
+                )
+            else:
+                idx = getattr(cam, "index_or_path", cam)
+                items.append(f"{name}: {idx}")
         return "{" + ", ".join(items) + "}"
 
     @classmethod

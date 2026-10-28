@@ -35,6 +35,10 @@ class CameraConfig:
     width: int = 640
     height: int = 480
     fps: int = 30
+    camera_type: str = "opencv"  # "opencv", "intelrealsense", etc.
+    serial_number_or_name: str | None = None
+    use_depth: bool = False
+    extra_params: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -47,6 +51,10 @@ class CameraConfig:
             width=int(data.get("width", 640)),
             height=int(data.get("height", 480)),
             fps=int(data.get("fps", 30)),
+            camera_type=str(data.get("camera_type", "opencv")),
+            serial_number_or_name=data.get("serial_number_or_name"),
+            use_depth=bool(data.get("use_depth", False)),
+            extra_params=data.get("extra_params", {}),
         )
 
 
@@ -66,6 +74,7 @@ class RobotProfile:
     teleop_type: str = "so100_leader"
     calibration_dir: str = ""
     notes: str = ""
+    plugin_configs: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -74,6 +83,7 @@ class RobotProfile:
         data["left_arm"] = self.left_arm.to_dict() if self.left_arm else None
         data["right_arm"] = self.right_arm.to_dict() if self.right_arm else None
         data["cameras"] = {k: v.to_dict() for k, v in self.cameras.items()}
+        data["plugin_configs"] = self.plugin_configs
         return data
 
     @classmethod
@@ -83,6 +93,7 @@ class RobotProfile:
         left_raw = data.get("left_arm")
         right_raw = data.get("right_arm")
         cameras_raw = data.get("cameras", {})
+        plugin_configs = data.get("plugin_configs", {})
 
         return cls(
             name=data.get("name", "default"),
@@ -98,6 +109,7 @@ class RobotProfile:
             teleop_type=data.get("teleop_type", "so100_leader"),
             calibration_dir=data.get("calibration_dir", ""),
             notes=data.get("notes", ""),
+            plugin_configs=plugin_configs if isinstance(plugin_configs, dict) else {},
         )
 
 
@@ -109,6 +121,9 @@ class CLIrobotConfig:
     lerobot_path: str = ""
     auto_save_ports: bool = True
     default_backend: str = "auto"  # auto, path, venv, conda
+    enabled_plugins: list[str] = field(default_factory=list)
+    disabled_plugins: list[str] = field(default_factory=list)
+    plugin_search_paths: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -117,6 +132,9 @@ class CLIrobotConfig:
             "lerobot_path": self.lerobot_path,
             "auto_save_ports": self.auto_save_ports,
             "default_backend": self.default_backend,
+            "enabled_plugins": self.enabled_plugins,
+            "disabled_plugins": self.disabled_plugins,
+            "plugin_search_paths": self.plugin_search_paths,
         }
 
     @classmethod
@@ -129,4 +147,7 @@ class CLIrobotConfig:
             lerobot_path=data.get("lerobot_path", ""),
             auto_save_ports=data.get("auto_save_ports", True),
             default_backend=data.get("default_backend", "auto"),
+            enabled_plugins=data.get("enabled_plugins", []),
+            disabled_plugins=data.get("disabled_plugins", []),
+            plugin_search_paths=data.get("plugin_search_paths", []),
         )

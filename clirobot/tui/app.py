@@ -36,6 +36,10 @@ class TUIApp:
     def __init__(self, config_manager: ConfigManager | None = None):
         self.mgr = config_manager or ConfigManager()
         self.runner = CommandRunner(self.mgr)
+        from clirobot.plugins.manager import PluginManager
+        from clirobot.plugins.base import PluginContext
+        self.pm = PluginManager(self.mgr)
+        self.ctx = PluginContext(self.mgr, self.runner, console)
 
     def start(self) -> None:
         """Launch the top-level TUI main menu."""
@@ -73,6 +77,13 @@ class TUIApp:
                     label="Datasets & Visualization",
                     icon="📊",
                     description="Visualize episodes in Rerun, edit datasets, annotate tasks, or build MP4 sidecars.",
+                ),
+                MenuItem(
+                    id="plugins",
+                    label="Plugins & Extensions",
+                    icon="🧩",
+                    description="Manage, configure, and inspect extra tool plugins (Vision, FLAG Embodied, Visualizer).",
+                    badge=f"{len(self.pm.list_plugins(enabled_only=True))} active",
                 ),
                 MenuItem(
                     id="doctor",
@@ -117,6 +128,8 @@ class TUIApp:
                 self._menu_calibration()
             elif choice.id == "datasets":
                 self._menu_datasets()
+            elif choice.id == "plugins":
+                self._menu_plugins()
             elif choice.id == "doctor":
                 clear_terminal()
                 display_doctor_report()
@@ -180,6 +193,10 @@ class TUIApp:
                 ),
             ]
 
+            plugin_contribs = [c for c in self.pm.get_tui_contributions(self.ctx) if c.target_menu == "control"]
+            for c in plugin_contribs:
+                items.insert(-1, c.item)
+
             choice = run_menu(
                 title="Robotics Control",
                 subtitle="Execute teleoperation, recording, calibration, or training:",
@@ -192,6 +209,16 @@ class TUIApp:
                 break
 
             clear_terminal()
+
+            handled = False
+            for c in plugin_contribs:
+                if choice.id == c.item.id:
+                    c.handler(self.ctx)
+                    pause_return_to_menu()
+                    handled = True
+                    break
+            if handled:
+                continue
 
             if choice.id == "teleop":
                 args = LeRobotArgsBuilder.build_teleoperate_args(profile)
@@ -651,6 +678,10 @@ class TUIApp:
                 ),
             ]
 
+            prof_contribs = [c for c in self.pm.get_tui_contributions(self.ctx) if c.target_menu == "profiles"]
+            for c in prof_contribs:
+                items.insert(-1, c.item)
+
             choice = run_menu(
                 title="Profiles & Configuration",
                 subtitle="Manage hardware configurations and profiles:",
@@ -663,6 +694,16 @@ class TUIApp:
                 break
 
             clear_terminal()
+
+            handled = False
+            for c in prof_contribs:
+                if choice.id == c.item.id:
+                    c.handler(self.ctx)
+                    pause_return_to_menu()
+                    handled = True
+                    break
+            if handled:
+                continue
 
             if choice.id == "switch":
                 profile_choices = [
@@ -736,7 +777,7 @@ class TUIApp:
 
                 p_choices = [
                     MenuItem(id=pname, label=pname, icon="🗑️", description=f"Type: {p.robot_type}")
-                    for pname in self.mgr.config.profiles
+                    for pname, p in self.mgr.config.profiles.items()
                 ]
                 p_choices.append(MenuItem(id="cancel", label="Cancel", icon="↩️"))
 
@@ -994,12 +1035,22 @@ class TUIApp:
                     description="Run lerobot-imgtransform-viz to inspect image augmentations.",
                 ),
                 MenuItem(
+                    id="pipeline",
+                    label="Run Dataset Pipeline",
+                    icon="🛠️",
+                    description="Execute a multi-step transformation recipe (split -> prune -> augment).",
+                ),
+                MenuItem(
                     id="back",
                     label="Back to Main Menu",
                     icon="↩️",
                     description="Return to previous menu.",
                 ),
             ]
+
+            plugin_contribs = [c for c in self.pm.get_tui_contributions(self.ctx) if c.target_menu == "datasets"]
+            for c in plugin_contribs:
+                items.insert(-1, c.item)
 
             choice = run_menu(
                 title="Datasets & Visualization",
@@ -1014,7 +1065,29 @@ class TUIApp:
 
             clear_terminal()
 
-            if choice.id == "viz":
+            handled = False
+            for c in plugin_contribs:
+                if choice.id == c.item.id:
+                    c.handler(self.ctx)
+                    pause_return_to_menu()
+                    handled = True
+                    break
+            if handled:
+                continue
+
+            if choice.id == "pipeline":
+                from clirobot.dataset.pipeline import DatasetPipelineEngine, load_pipeline_recipe
+                recipe_path = Prompt.ask("Path to pipeline recipe JSON/YAML (or press Enter to cancel)", default="")
+                if recipe_path.strip():
+                    try:
+                        init_in, steps, _ = load_pipeline_recipe(recipe_path)
+                        engine = DatasetPipelineEngine(self.mgr)
+                        engine.run_pipeline(steps=steps, initial_input=init_in or profile.dataset_repo_id)
+                    except Exception as e:
+                        print_error(f"Pipeline error: {e}")
+                pause_return_to_menu()
+
+            elif choice.id == "viz":
                 repo = Prompt.ask("Dataset repo ID", default=profile.dataset_repo_id)
                 self.runner.run("dataset-viz", [f"--repo-id={repo}"])
                 pause_return_to_menu()
@@ -1086,4 +1159,105 @@ class TUIApp:
             elif choice.id == "transform":
                 repo = Prompt.ask("Dataset repo ID", default=profile.dataset_repo_id)
                 self.runner.run("imgtransform-viz", [f"--repo-id={repo}"])
+                pause_return_to_menu()
+
+    # ========================================================================
+    # Submenu: Plugins & Tool Extensions
+    # ========================================================================
+
+    def _menu_plugins(self) -> None:
+        """Plugins submenu: view, toggle, and inspect tool plugins."""
+        while True:
+            profile = self.mgr.get_active_profile()
+            plugins = self.pm.list_plugins()
+
+            items = []
+            for p in plugins:
+                is_enabled = self.mgr.is_plugin_enabled(p.metadata.id)
+                is_avail, reason = p.is_available()
+                badge = "ACTIVE" if (is_enabled and is_avail) else ("DISABLED" if not is_enabled else "UNAVAILABLE")
+                items.append(
+                    MenuItem(
+                        id=f"plugin_{p.metadata.id}",
+                        label=p.metadata.name,
+                        icon="🧩" if is_avail else "⚠️",
+                        description=f"{p.metadata.description} ({reason})",
+                        badge=badge,
+                    )
+                )
+
+            items.append(
+                MenuItem(
+                    id="back",
+                    label="Back to Main Menu",
+                    icon="↩️",
+                    description="Return to previous menu.",
+                )
+            )
+
+            choice = run_menu(
+                title="Plugins & Tool Extensions",
+                subtitle="Select a plugin to toggle or inspect details:",
+                items=items,
+                active_profile=profile,
+                breadcrumbs=["Home", "Plugins"],
+            )
+
+            if choice is None or choice.id == "back":
+                break
+
+            clear_terminal()
+            plugin_id = choice.id.replace("plugin_", "")
+            selected_plugin = self.pm.get_plugin(plugin_id)
+            if not selected_plugin:
+                continue
+
+            # Plugin action menu
+            is_enabled = self.mgr.is_plugin_enabled(plugin_id)
+            toggle_label = "Disable Plugin" if is_enabled else "Enable Plugin"
+            toggle_icon = "⏸️" if is_enabled else "▶️"
+
+            act_items = [
+                MenuItem(id="toggle", label=toggle_label, icon=toggle_icon, description="Change plugin global active state."),
+                MenuItem(id="info", label="View Plugin Details & Config", icon="📋", description="Inspect capabilities and profile JSON."),
+                MenuItem(id="cancel", label="Back to Plugins Menu", icon="↩️"),
+            ]
+
+            act_choice = run_menu(
+                title=f"Plugin: {selected_plugin.metadata.name}",
+                subtitle=f"Status: {'Enabled' if is_enabled else 'Disabled'} | Category: {selected_plugin.metadata.category}",
+                items=act_items,
+                active_profile=profile,
+                breadcrumbs=["Home", "Plugins", selected_plugin.metadata.name],
+            )
+
+            if not act_choice or act_choice.id == "cancel":
+                continue
+
+            clear_terminal()
+            if act_choice.id == "toggle":
+                if is_enabled:
+                    self.mgr.disable_plugin(plugin_id)
+                    print_warning(f"Disabled plugin '{selected_plugin.metadata.name}'.")
+                else:
+                    self.mgr.enable_plugin(plugin_id)
+                    print_success(f"Enabled plugin '{selected_plugin.metadata.name}'.")
+                time.sleep(1)
+            elif act_choice.id == "info":
+                import json
+                from rich.panel import Panel
+                cfg = self.mgr.get_plugin_config(plugin_id)
+                console.print(
+                    Panel(
+                        f"[bold cyan]ID:[/bold cyan]          {selected_plugin.metadata.id}\n"
+                        f"[bold cyan]Name:[/bold cyan]        {selected_plugin.metadata.name}\n"
+                        f"[bold cyan]Category:[/bold cyan]    {selected_plugin.metadata.category}\n"
+                        f"[bold cyan]Description:[/bold cyan] {selected_plugin.metadata.description}\n\n"
+                        f"[bold green]Active Profile Config ({profile.name}):[/bold green]\n"
+                        f"{json.dumps(cfg, indent=2)}",
+                        title=f"[bold blue]🧩 Plugin Info: {selected_plugin.metadata.name}[/bold blue]",
+                        border_style="bright_blue",
+                        padding=(1, 2),
+                    )
+                )
                 pause_return_to_menu()

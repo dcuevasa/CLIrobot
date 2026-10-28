@@ -5,17 +5,18 @@ import sys
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 from rich.panel import Panel
 from rich.table import Table
 from rich.syntax import Syntax
 from clirobot.constants import LEROBOT_BINARIES_MAP, LEROBOT_COMMANDS_MAP
 from clirobot.ui.console import console, print_info, print_warning, print_error, print_success, make_card
 from clirobot.config.manager import ConfigManager
+from clirobot.plugins.base import ExecutionPlan, PluginContext
 
 
 class CommandRunner:
-    """Dispatches and streams execution of LeRobot commands with profile integration."""
+    """Dispatches and streams execution of LeRobot commands with profile integration and plugin middlewares."""
 
     def __init__(self, config_manager: ConfigManager | None = None):
         self.config_manager = config_manager or ConfigManager()
@@ -60,10 +61,40 @@ class CommandRunner:
         args: list[str],
         dry_run: bool = False,
         capture_output: bool = False,
+        runtime_options: dict[str, Any] | None = None,
     ) -> int:
-        """Execute the command with streaming output or dry-run inspection."""
-        exe, base_args = self.resolve_executable(command_key)
-        full_command = [exe] + base_args + args
+        """Execute the command through plugin middlewares with streaming output or dry-run inspection."""
+        plan = ExecutionPlan(command_key=command_key, args=list(args))
+
+        # Apply runtime middlewares
+        try:
+            from clirobot.plugins.manager import PluginManager
+
+            pm = PluginManager(self.config_manager)
+            middlewares = pm.get_middlewares_for_command(command_key)
+            if middlewares:
+                ctx = PluginContext(self.config_manager, self, console)
+                for mw in middlewares:
+                    plan = mw.mutate_execution_plan(plan, ctx, runtime_options=runtime_options)
+        except Exception as e:
+            # Fall back to unmutated execution if plugins encounter an issue
+            pass
+
+        return self.run_plan(plan, dry_run=dry_run, capture_output=capture_output)
+
+    def run_plan(
+        self,
+        plan: ExecutionPlan,
+        dry_run: bool = False,
+        capture_output: bool = False,
+    ) -> int:
+        """Execute a concrete ExecutionPlan."""
+        if plan.executable_override:
+            exe, base_args = plan.executable_override
+        else:
+            exe, base_args = self.resolve_executable(plan.command_key)
+
+        full_command = [exe] + base_args + plan.args
 
         # Display command launch panel
         cmd_str = " \\\n  ".join([f'"{c}"' if " " in c or "{" in c else c for c in full_command])
@@ -72,7 +103,7 @@ class CommandRunner:
             console.print(
                 Panel(
                     Syntax(cmd_str, "bash", theme="monokai", word_wrap=True),
-                    title=f"[bold yellow]⚡ DRY RUN: {command_key}[/bold yellow]",
+                    title=f"[bold yellow]⚡ DRY RUN: {plan.command_key}[/bold yellow]",
                     subtitle="[dim]Copy and execute directly or run without --dry-run[/dim]",
                     border_style="yellow",
                     padding=(1, 2),
@@ -83,11 +114,15 @@ class CommandRunner:
         console.print(
             Panel(
                 Syntax(cmd_str, "bash", theme="monokai", word_wrap=True),
-                title=f"[bold green]▶ Launching LeRobot: {command_key}[/bold green]",
+                title=f"[bold green]▶ Launching LeRobot: {plan.command_key}[/bold green]",
                 border_style="bright_blue",
                 padding=(0, 2),
             )
         )
+
+        env = os.environ.copy()
+        if plan.env_overrides:
+            env.update(plan.env_overrides)
 
         try:
             process = subprocess.Popen(
@@ -95,6 +130,7 @@ class CommandRunner:
                 stdout=None if not capture_output else subprocess.PIPE,
                 stderr=None if not capture_output else subprocess.PIPE,
                 text=True,
+                env=env,
             )
             process.wait()
             return process.returncode
