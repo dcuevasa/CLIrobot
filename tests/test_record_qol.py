@@ -74,32 +74,43 @@ def test_hud_panel_qol_badges():
     assert "Streaming Encode" in rendered
 
 
+import re
+
+def _clean_output(text: str) -> str:
+    """Strip ANSI escape sequences from terminal output."""
+    return re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", text)
+
+
 def test_cli_record_help():
-    result = runner.invoke(app, ["record", "--help"])
+    result = runner.invoke(app, ["record", "--help"], env={"NO_COLOR": "1"})
     assert result.exit_code == 0
-    assert "--display-data" in result.output
-    assert "--streaming-encoding" in result.output
-    assert "--play-sounds" in result.output
-    assert "--reset-every-episode" in result.output
-    assert "--resume" in result.output
+    clean = _clean_output(result.output)
+    assert "--display-data" in clean
+    assert "--streaming-encoding" in clean
+    assert "--play-sounds" in clean
+    assert "--reset-every-episode" in clean
+    assert "--resume" in clean
 
 
 def test_cli_dataset_subcommands_help():
     # prune help
-    res_prune = runner.invoke(app, ["dataset", "prune", "--help"])
+    res_prune = runner.invoke(app, ["dataset", "prune", "--help"], env={"NO_COLOR": "1"})
     assert res_prune.exit_code == 0
-    assert "--drop-depth" in res_prune.output
-    assert "--drop-ee" in res_prune.output
-    assert "--slice-dof" in res_prune.output
+    clean_prune = _clean_output(res_prune.output)
+    assert "--drop-depth" in clean_prune
+    assert "--drop-ee" in clean_prune
+    assert "--slice-dof" in clean_prune
 
     # split help
-    res_split = runner.invoke(app, ["dataset", "split", "--help"])
+    res_split = runner.invoke(app, ["dataset", "split", "--help"], env={"NO_COLOR": "1"})
     assert res_split.exit_code == 0
-    assert "--annotation-type" in res_split.output
-    assert "--subtask" in res_split.output
-    assert "--hub-repo-prefix" in res_split.output
+    clean_split = _clean_output(res_split.output)
+    assert "--annotation-type" in clean_split
+    assert "--subtask" in clean_split
+    assert "--hub-repo-prefix" in clean_split
 
     # annotations help
-    res_ann = runner.invoke(app, ["dataset", "annotations", "--help"])
+    res_ann = runner.invoke(app, ["dataset", "annotations", "--help"], env={"NO_COLOR": "1"})
     assert res_ann.exit_code == 0
-    assert "--repo-id" in res_ann.output
+    clean_ann = _clean_output(res_ann.output)
+    assert "--repo-id" in clean_ann

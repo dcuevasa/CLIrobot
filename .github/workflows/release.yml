@@ -35,6 +35,8 @@ jobs:
           echo "VIRTUAL_ENV=$PWD/.venv" >> $GITHUB_ENV
 
       - name: Install dependencies & run tests
+        env:
+          NO_COLOR: "1"
         run: |
           uv pip install evdev-binary
           python -c "

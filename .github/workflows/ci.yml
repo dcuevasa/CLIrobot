@@ -77,6 +77,8 @@ jobs:
           uv pip install -e ".[dev,vision]"
 
       - name: Run test suite with coverage
+        env:
+          NO_COLOR: "1"
         run: |
           pytest tests/ -v --cov=clirobot --cov-report=xml --cov-report=term
 
