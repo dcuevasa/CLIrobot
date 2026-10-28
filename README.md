@@ -48,6 +48,9 @@ Standard LeRobot commands (`lerobot-find-port`, `lerobot-record`, `lerobot-teleo
 | **Port Management** | Prints ports; manual copy-pasting | 1-click list select, interactive plug-and-detect wizard, udev rules |
 | **Keyboard Control** | Crashes on Wayland/SSH/Docker; loses focus | Cross-platform (Linux, Windows, macOS) native reader + OpenCV bridge |
 | **Recording QoL** | Rigid flow, long encoding pauses | Hotkey flow (Enter/Right/Left/Space/Esc), buffer clearing, Rerun viz, sound cues, streaming encode |
+| **Extensibility** | Monolithic codebase; hardcoded commands | Open Plugin Architecture (`BasePlugin`, `DatasetTransformPlugin`, `RuntimeMiddlewarePlugin`, `ServicePlugin`) |
+| **Tool Ecosystem** | Disconnected standalone repos | Integrated adapters for `vision-detector` (YOLO), `embodied-data` (MuJoCo/Sim), and `dataset-visualizer` (3D web studio) |
+| **Dataset Pipelines** | Ad-hoc custom scripts | Composable declarative recipes (`clirobot dataset pipeline run`) chaining multi-step transforms |
 | **Dataset Pruning** | Manual custom scripts | 1-command depth stripping, 6-DoF/custom EE slicing, metadata sync, Hub upload |
 | **Annotation Splitting** | Monolithic datasets | Strategy-based splitting (subtask, task_aug, plan, VQA, speech), video re-encoding, Hub push |
 | **Calibration** | Hidden JSON files in cache | List, inspect joints visually, backup, restore, diff, export/import |
@@ -84,6 +87,7 @@ Select an option using arrow keys [↑/↓] and press Enter:
     👤 Profiles & Configuration       Switch robot profile or edit parameters
     🗜️ Calibration Files Manager       Inspect joint offsets, diff, or backup
     📊 Datasets & Visualization       Rerun visualizer, edit episodes, sidecars
+    🧩 Plugins & Extensions           List, enable, disable, and run plugin tools
     🩺 System Doctor Diagnostics       Check Python, LeRobot, serial permissions
     ⌨️ Keyboard Diagnostics & Test    Test latency and cross-platform key capture
     🚪 Exit CLIrobot                  Return to terminal shell
@@ -434,6 +438,108 @@ clirobot config set lerobot_path /opt/conda/envs/lerobot
 
 ---
 
+## 🧩 Plugin Architecture & Tool Extensions
+
+CLIrobot includes an open, modular **Plugin System** that seamlessly integrates external robotics utilities, data manipulation tools, and runtime middlewares into the CLI, TUI, and hardware profiles without modifying core LeRobot.
+
+### 🌟 Core Architectural Concepts
+
+```mermaid
+graph TD
+    CLI["CLIrobot Hub (CLI / TUI / Engine)"] --> PM["PluginManager"]
+    PM --> B1["core-dataset (Pruner, Splitter, Stats)"]
+    PM --> B2["vision-detector (YOLOv8/v11 Augmentation & Overlays)"]
+    PM --> B3["embodied-data (Physical/Sim 50Hz, RealSense Depth, Hotkeys)"]
+    PM --> B4["dataset-visualizer (3D URDF Web Studio & v3.1 Parquet)"]
+    PM --> CUST["Your Custom Community Plugins"]
+```
+
+Plugins inherit from one or more capability interfaces:
+* **`DatasetTransformPlugin`**: Register composable dataset transformation steps into CLIrobot's pipeline engine.
+* **`RuntimeMiddlewarePlugin`**: Intercept, mutate, wrap, or monitor execution plans (e.g. `lerobot-record`, `lerobot-teleoperate`).
+* **`ServicePlugin`**: Manage external daemon services and web visualizers with start/stop/status lifecycles.
+* **`BasePlugin`**: Register Typer subcommands, contribute interactive TUI menu options, and expose health checks in `clirobot doctor`.
+
+---
+
+### 📦 Built-In Tool Adapters
+
+| Plugin | Type | Capabilities & Description |
+| :--- | :--- | :--- |
+| **`core-dataset`** | Transform | Strip heavy depth images, slice action/state dimensions (e.g. 6-DoF), temporal subtask splitting (`subtask`, `task_aug`, `plan`, `vqa`, `speech`), and MP4 video re-encoding. |
+| **`vision-detector`** | Transform & Middleware | Offline YOLOv8/v11 object detection, bounding box injection, video sidecars, and real-time live detection overlays on camera streams during teleop. |
+| **`embodied-data`** | Middleware & Control | 50Hz synchronized recording, manual episode state machine hotkeys (`Enter`/`Space`/`Right`/`Esc`), RealSense depth capture, MuJoCo sim, and bash variable import. |
+| **`dataset-visualizer`** | Service & Transform | 3D web viewer with URDF joint playback (Next.js + FastAPI), Parquet v3.1 export, and Hugging Face Hub dataset publishing. |
+
+---
+
+### 🛠️ Plugin Management Commands
+
+```bash
+# List all discovered plugins and their active status
+clirobot plugin list
+
+# Inspect detailed plugin capabilities and metadata
+clirobot plugin info vision-detector
+
+# Enable or disable plugins
+clirobot plugin disable vision-detector
+clirobot plugin enable vision-detector
+
+# Register custom plugin directory
+clirobot plugin add /path/to/my/plugins
+```
+
+---
+
+### 🔄 Composable Dataset Pipelines
+
+Chain multiple data manipulation steps across different plugins into a single reproducible recipe (`recipe.yaml`):
+
+```yaml
+meta:
+  name: "Multimodal Processing Pipeline"
+input: "user/raw-dataset"
+
+steps:
+  - transform: "prune-dataset"
+    params: { strip_depth: true, slice_action: "0:6" }
+
+  - transform: "vision-augment"
+    params: { model: "yolov8m.pt", conf: 0.45 }
+
+  - transform: "split-dataset"
+    params: { strategy: "subtask", min_episode_len: 15 }
+```
+
+Execute or dry-run the pipeline with one command:
+```bash
+# List all registered transforms
+clirobot dataset transforms
+
+# Dry-run validation
+clirobot dataset pipeline run recipe.yaml --dry-run
+
+# Run and push final output to Hugging Face Hub
+clirobot dataset pipeline run recipe.yaml \
+  --output-dir "./data/processed" \
+  --push-to-hub \
+  --hub-repo-id "user/processed-dataset"
+```
+
+---
+
+### 📚 Detailed Documentation
+
+For full guides and reference manuals, visit the [`docs/`](docs/README.md) folder:
+* 📖 [**Plugin System Overview**](docs/plugins/overview.md)
+* 📐 [**Plugin Contract Specification**](docs/plugins/contract_specification.md)
+* 🚀 [**Developing Custom Plugins Guide**](docs/plugins/developing_plugins.md)
+* 🔀 [**Composable Dataset Pipelines Guide**](docs/plugins/dataset_pipelines.md)
+* 🧩 [**Integrated Tools & Adapters Reference**](docs/plugins/integrated_plugins.md)
+
+---
+
 ## 🧪 Running Tests
 
 CLIrobot comes with a full automated test suite:
@@ -442,7 +548,16 @@ CLIrobot comes with a full automated test suite:
 pytest -v
 ```
 
-All 36 test cases cover configuration serialization, port enumeration, udev rule generation, calibration inspection, diffing, keyboard readers, OpenCV bridges, dataset pruning, annotation-based splitting, recording QoL flags, and CLI execution.
+All 50 test cases cover:
+* Plugin manager discovery (entry points & directory search)
+* Capability mixins (`DatasetTransformPlugin`, `RuntimeMiddlewarePlugin`, `ServicePlugin`)
+* Composable dataset pipeline engine & YAML/JSON recipe execution
+* Built-in adapters (`core-dataset`, `vision-detector`, `embodied-data`, `dataset-visualizer`)
+* Hardware profile configuration serialization & bash variable import
+* Serial port enumeration & udev rule generation
+* Calibration inspection, diffing, and export/import
+* Cross-platform keyboard reader & OpenCV bridge
+* Standard LeRobot command mapping & runner execution
 
 ---
 

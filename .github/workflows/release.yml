@@ -18,20 +18,41 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y linux-libc-dev libevdev-dev
+
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
-      - name: Set up Python 3.11
+      - name: Create virtual environment
         run: |
-          uv python install 3.11
+          uv venv --python 3.11
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+          echo "VIRTUAL_ENV=$PWD/.venv" >> $GITHUB_ENV
 
       - name: Install dependencies & run tests
         run: |
           uv pip install evdev-binary
+          python -c "
+          import glob, shutil, os
+          for d in glob.glob('.venv/lib/python*/site-packages'):
+              src = os.path.join(d, 'evdev_binary-2.0.0.dist-info')
+              dst = os.path.join(d, 'evdev-2.0.0.dist-info')
+              if os.path.exists(src) and not os.path.exists(dst):
+                  shutil.copytree(src, dst)
+                  meta = os.path.join(dst, 'METADATA')
+                  if os.path.exists(meta):
+                      with open(meta, 'r') as f:
+                          c = f.read().replace('Name: evdev-binary', 'Name: evdev')
+                      with open(meta, 'w') as f:
+                          f.write(c)
+          "
           uv pip install -e ".[dev,vision]"
-          uv run pytest tests/ -v
+          pytest tests/ -v
 
       - name: Build distributions
         run: |

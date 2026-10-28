@@ -40,24 +40,45 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y linux-libc-dev libevdev-dev
+
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Create virtual environment
         run: |
-          uv python install ${{ matrix.python-version }}
+          uv venv --python ${{ matrix.python-version }}
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+          echo "VIRTUAL_ENV=$PWD/.venv" >> $GITHUB_ENV
 
       - name: Install dependencies
         run: |
-          # Install prebuilt evdev-binary to prevent source compilation issues in virtual environments
+          # Install evdev-binary and patch dist-info so evdev requirement is satisfied without source builds
           uv pip install evdev-binary
+          python -c "
+          import glob, shutil, os
+          for d in glob.glob('.venv/lib/python*/site-packages'):
+              src = os.path.join(d, 'evdev_binary-2.0.0.dist-info')
+              dst = os.path.join(d, 'evdev-2.0.0.dist-info')
+              if os.path.exists(src) and not os.path.exists(dst):
+                  shutil.copytree(src, dst)
+                  meta = os.path.join(dst, 'METADATA')
+                  if os.path.exists(meta):
+                      with open(meta, 'r') as f:
+                          c = f.read().replace('Name: evdev-binary', 'Name: evdev')
+                      with open(meta, 'w') as f:
+                          f.write(c)
+          "
           uv pip install -e ".[dev,vision]"
 
       - name: Run test suite with coverage
         run: |
-          uv run pytest tests/ -v --cov=clirobot --cov-report=xml --cov-report=term
+          pytest tests/ -v --cov=clirobot --cov-report=xml --cov-report=term
 
       - name: Upload coverage report
         if: matrix.python-version == '3.11'
