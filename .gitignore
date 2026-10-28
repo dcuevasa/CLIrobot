@@ -221,3 +221,5 @@ __marimo__/
 
 
 .pytest_cache/
+
+uv.lock*
